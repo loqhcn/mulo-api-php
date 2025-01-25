@@ -1,0 +1,15 @@
+{
+    "name": "mulo/api",
+    "autoload": {
+        "psr-4": {
+            "mulo\\api\\": "src/"
+        }
+    },
+    "authors": [
+        {
+            "name": "mulo",
+            "email": "474693310@qq.com"
+        }
+    ],
+    "require": {}
+}
