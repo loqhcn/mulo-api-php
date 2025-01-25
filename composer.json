@@ -1,5 +1,5 @@
 {
-    "name": "mulo/api",
+    "name": "mulo/model-api",
     "autoload": {
         "psr-4": {
             "mulo\\api\\": "src/api/",
