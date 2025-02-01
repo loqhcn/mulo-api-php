@@ -6,4 +6,6 @@
 
 # 安装
 
-composer require mulo/api
+```bash
+composer require mulo/model-api
+```

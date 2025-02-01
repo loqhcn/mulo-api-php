@@ -1,15 +1,16 @@
 {
     "name": "mulo/model-api",
+    "description": "api in php for mulo-model",
     "autoload": {
         "psr-4": {
-            "mulo\\api\\": "src/api/",
-            "mulo\\exception\\": "src/exception/",
-            "mulo\\auth\\": "src/auth/"
+            "mulo\\": "src",
+			"mulo\\test\\":"test"
         },
         "files": [
             "src/helper/helper.php"
         ]
     },
+    "license": "Apache-2.0",
     "authors": [
         {
             "name": "mulo",
