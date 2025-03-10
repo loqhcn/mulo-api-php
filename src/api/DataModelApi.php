@@ -7,6 +7,8 @@ use mulo\api\form\ModelForm;
 use mulo\api\list\ModelList;
 use mulo\api\library\BaseFilter;
 use mulo\api\library\ModelDb;
+use mulo\api\library\ModelHandle;
+use mulo\api\list\TreeTool;
 use mulo\api\logic\data_model\InjectsHandle;
 use mulo\exception\MuloException;
 use mulo\facade\Db;
@@ -33,6 +35,16 @@ class DataModelApi
      */
     public $filters = [];
 
+    public $relations = [];
+
+    /** 
+     * @var array 数据所属 
+     * @todo 验证数据所属
+     * 
+     */
+    public $belong = [];
+
+
     function __construct($model)
     {
 
@@ -53,6 +65,12 @@ class DataModelApi
     function filter(array $filters)
     {
         $this->filters = $filters;
+        return $this;
+    }
+
+    function setRelations($relations)
+    {
+        $this->relations = $relations;
         return $this;
     }
 
@@ -103,7 +121,9 @@ class DataModelApi
             $query = $query->where($filterWhere);
         }
 
-        $list = $query->select();
+        $sortField = input("sort_field",'id');
+        $sortMode = input("sort_mode",'desc');
+        $list = $query->order("{$sortField} {$sortMode}")->select();
         return $list;
     }
 
@@ -172,22 +192,73 @@ class DataModelApi
         return $data;
     }
 
+    function getQuery()
+    {
+        $query =  ModelDb::model($this->modelData)->setRelations($this->relations);
+        return $query;
+    }
+
     /**
-     * 分页查询
+     * TODO 分页查询 paginate
      * 
      */
     function paginate($psize = 10)
     {
+        $treeOptions = input('tree_options/a', null);
 
-        $query =  ModelDb::model($this->modelData);
+        $query =  $this->getQuery();
         if ($this->where) {
             $query = $query->where($this->where);
         }
         if (!empty($this->filters)) {
             $query = $query->filter($this->filters);
         }
+        $_query = clone $query;
 
-        $list = $query->order('id desc')->paginate($psize);
+        if ($treeOptions) {
+            $query->where($treeOptions['pid_field'], 0);
+        }
+
+        // TODO -- 查询列表
+        $sortField = input("sort_field",'id');
+        $sortMode = input("sort_mode",'desc');
+        $sortField = $sortField? $sortField : 'id';
+        $sortMode = $sortMode? $sortMode : 'desc';
+
+        $list = $query->order("{$sortField} {$sortMode}")->paginate($psize);
+        $list = $list ? $list->toArray() : [];
+
+        // TODO -- [tree] 加载下级数据
+        if ($treeOptions) {
+            $list['data'] = TreeTool::src($_query)
+                ->setList($list['data'])
+                ->setFields([
+                    // 'deep' => 'deep'
+                ])
+                ->dest(true);
+        }
+
+        return $list;
+    }
+
+    /**
+     * TODO 列表查询 list
+     * 
+     */
+    function list()
+    {
+        $query =  $this->getQuery();
+
+        // $query =  Db::table($this->modelData['table']);
+        if ($this->where) {
+            $query = $query->where($this->where);
+        }
+        if (!empty($this->filters)) {
+            $filterWhere = BaseFilter::src($this->filters)->dest();
+            $query = $query->where($filterWhere);
+        }
+
+        $list = $query->select();
         return $list;
     }
 
@@ -220,7 +291,8 @@ class DataModelApi
         if (!$row) {
             if ($throw) {
                 throw new MuloException("未找到行", 0, [
-                    'id' => $id
+                    'id' => $id,
+                    // 'model' => $this->modelData
                 ]);
             }
         }
@@ -250,14 +322,15 @@ class DataModelApi
      */
     function handle($api = 'list')
     {
+        $modelName = $this->modelData['name'];
+
         $request = request();
         $request = $this->handleHook('api.handle.before', $request, 'request');
         $filters = input('filters/a', []);
+
         if (!empty($filters)) {
             $this->addFilter($filters);
         }
-
-
 
         $data = [
             'title' => $this->modelData['row']['title'],
@@ -270,15 +343,14 @@ class DataModelApi
 
         # TODO -- list 列表查询
         if ($api == 'list') {
-            $data['list'] = $this->select();
-
+            $list = $this->list();
+            $data['list'] = $list;
             $data = $this->handleHook('api.handle.list.end', $data);
         }
         # TODO -- paginate 列表查询
         else if ($api == 'paginate') {
             $this->handleHook('api.handle.paginate.begin', $this, null);
             $list = $this->paginate();
-            $list = $list ? $list->toArray() : [];
             $data['list'] = $list;
             $data = $this->handleHook('api.handle.paginate.end', $data);
         }
@@ -303,7 +375,7 @@ class DataModelApi
             $data['row'] = $row;
         }
 
-        # TODO -- save 保存 新增或更新
+        # TODO -- save 保存 新增或更新[通过ID判断]
         else if ($api == 'save') {
             // 读取数据
             $id = input('id');
@@ -330,7 +402,7 @@ class DataModelApi
             $saveData = $this->handleHook('api.handle.save.before', $saveData);
             // 执行保存
             $_id = $this->save($saveData, $id);
-            
+
             if (!$id) {
                 $data['id'] = $_id;
             }
@@ -338,6 +410,55 @@ class DataModelApi
             $row = $this->getRow($_id);
 
             $data['row'] = $row;
+            $data = $this->handleHook('api.handle.save.end', $data);
+        }
+        # TODO -- save_multi 批量保存 新增或更新[通过ID判断]
+        else if ($api == 'save_multi') {
+
+            $items = input('items/a', []);
+            if (empty($items)) {
+                throw new MuloException("请输入数据", 0, [
+                    'key' => 'array post.items',
+                ]);
+            }
+
+            $list_add = [];
+            $list_update = [];
+
+            $saves = [];
+            foreach ($items as $key => $item) {
+                $item = $this->handleHook('api.handle.save.before', $item, 'none');
+                $items[$key] = $item;
+
+                if (!$item) {
+                    continue;
+                }
+
+                if (isset($item['id'])) {
+                    $list_update[] = $item;
+                } else {
+                    $list_add[] = $item;
+                }
+            }
+
+            // throw new MuloException('dev', 0, [
+            //     '$list_add' => $list_add,
+            //     '$list_update' => $list_update,
+            // ]);
+
+            $add_num = ModelDb::model($this->modelData['table'])->insertAll($list_add);
+            $update_num = 0;
+
+            foreach ($list_update as $key => $li) {
+                ModelDb::model($this->modelData['table'])->save($li);
+            }
+
+            $data['multi_save_status'] = [
+                'updates' => count($list_update),
+                'update_num' => $update_num,
+                'adds' => count($list_add),
+                'add_num' => $add_num,
+            ];
             $data = $this->handleHook('api.handle.save.end', $data);
         }
         # TODO -- delete 删除
@@ -357,8 +478,13 @@ class DataModelApi
         }
         # TODO -- form_rule 表单规则
         else if ($api == 'form_rule') {
+            $useOption = input('use_option', '');
+            $res = ModelHandle::src($modelName)
+                ->asForm($useOption)
+                ->dest();
             // 
-            $modelForm = new ModelForm($this->modelData);
+
+            $modelForm = new ModelForm($res['modelData']);
             $formRule = $modelForm->setHooks($this->hooks)->dest();
             $data['form_rule'] = $formRule;
 
@@ -366,17 +492,64 @@ class DataModelApi
         }
         # TODO -- table_rule 表格规则
         else if ($api == 'table_rule') {
-            $modelForm = new ModelList($this->modelData);
-            $listRule = $modelForm->setHooks($this->hooks)->dest();
+            $useOption = input('use_option', '');
+            $res = ModelHandle::src($modelName)
+                ->asTable($useOption)
+                ->dest();
 
+            $filterRes = ModelHandle::src($modelName)
+                ->asFilter($useOption)
+                // ->setItem([])
+                ->dest();
+
+            // 处理表格
+            $modelList = new ModelList($res['modelData']);
+            $listRule = $modelList->setHooks($this->hooks)->dest();
 
             $data['list_rule'] = $listRule;
+            $data['config'] = $res['config'];
+            $data['filters_rule'] = $filterRes['items'];
 
             $data = $this->handleHook('api.handle.table_rule.end', $data);
         }
+        # TODO -- view_rule 查看规则
+        else if ($api == 'view_rule') {
+            $useOption = input('use_option', '');
+            $res = ModelHandle::src($modelName)
+                ->asView($useOption)
+                ->dest();
+            $data['config'] = $res['config'];
+            $data['rules'] = $res['items'];
+            $data = $this->handleHook('api.handle.view_rule.end', $data);
+        }
+        # TODO -- view_rule 查看规则
+        else if ($api == 'detail_rule') {
+            $useOption = input('use_option', '');
+            $res = ModelHandle::src($modelName)
+                ->asDetail($useOption)
+                ->dest();
+            $data['config'] = $res['config'];
+            $data['rules'] = $res['items'];
+            $data = $this->handleHook('api.handle.view_rule.end', $data);
+        }
+        # TODO -- filter_rule 查看筛选
+        else if ($api == 'filter_rule') {
+            $useOption = input('use_option', '');
+            $res = ModelHandle::src($modelName)
+                ->asFilter($useOption)
+                ->dest();
+            $data['config'] = $res['config'];
+            $data['rules'] = $res['items'];
+            $data = $this->handleHook('api.handle.filter_rule.end', $data);
+        }
         # TODO -- list_rule 列表规则
         else if ($api == 'list_rule') {
-            $modelForm = new ModelList($this->modelData);
+            $useOption = input('use_option', '');
+            $res = ModelHandle::src($modelName)
+                ->asList($useOption)
+                ->dest();
+
+            $modelForm = new ModelList($res['modelData']);
             $listRule = $modelForm->setHooks($this->hooks)->dest();
             $data['list_rule'] = $listRule;
         }

@@ -59,14 +59,44 @@ class BaseFilter
         return function ($query) use ($wheres) {
 
             foreach ($wheres as $key => $li) {
-                // 传输传入方式 ["title","=","3"]
-                if ($this->isNumberIndexArray($li)) {
-                    $query->where(...$li);
+                if (is_array($li)) {
+                    if (empty($li)) {
+                        continue;
+                    }
+
+                    // 数组索引筛选
+                    if ($this->isNumberIndexArray($li)) {
+                        // 传输传入方式 ["title","=","3"]
+                        $query->where(...$li);
+                        continue;
+                    }
                 }
+
+                // throw new MuloException('dev',0,[
+                //     'wheres'=>$li,
+                // ]);
+
                 // 参数直接筛选方式 {"title":3}
-                else {
-                    $query->where($li);
+                $useParamsCondition = [];
+                $useArrayCondition = [];
+                foreach ($li as $key => $value) {
+                    // 依然采用参数传递的 { "income_id": [ "in", [12] ] }
+                    if(is_array($value) && count($value)==2 && is_string($value[0]??false)){
+                        $useParamsCondition[] = [$key,$value[0],$value[1]];
+                        continue;
+                    }
+                    // 普通方式传递的
+                    $useArrayCondition[$key] = $value;
                 }
+
+                if (!empty($useParamsCondition)) {
+                    $query->where($useParamsCondition);
+                }
+
+                if (!empty($useArrayCondition)) {
+                    $query->where($useArrayCondition);
+                }
+                
             }
         };
     }

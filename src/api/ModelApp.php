@@ -23,7 +23,9 @@ class ModelApp
 {
 
     
-    function __construct() {}
+    function __construct() {
+        
+    }
 
     /**
      * 构建链式方法
@@ -35,6 +37,8 @@ class ModelApp
         $obj = new self();
         return $obj;
     }
+
+
 
 
     /**

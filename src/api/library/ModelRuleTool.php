@@ -14,7 +14,7 @@ use mulo\facade\Db as MuloFacadeDb;
  */
 class ModelRuleTool
 {
-    
+
     public $items = [];
 
     function __construct() {}
@@ -70,6 +70,19 @@ class ModelRuleTool
     }
 
     /**
+     * 添加多个个规则
+     * @param array $item 添加的规则(列表,表单,表格)
+     * 
+     */
+    function addFields(array $items)
+    {
+        foreach ($items as $key => $item) {
+            $this->items[] = $item;
+        }
+        return $this;
+    }
+
+    /**
      * 移除字段
      * @param array $removeNames 移除的字段的名称
      * 
@@ -97,5 +110,16 @@ class ModelRuleTool
     function dest()
     {
         return $this->items;
+    }
+
+    function destDefaultRow()
+    {
+        // TODO 默认值
+        $defaultRow = [];
+        foreach ($this->items as $key => $item) {
+            $defaultRow[$item['name']] = $item['default'] ?? '';
+        }
+        
+        return $defaultRow;
     }
 }

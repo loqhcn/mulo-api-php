@@ -41,7 +41,9 @@ class Jwt
     static function getToken($uid, $data = [], $scene = 'user')
     {
         
-        $config = Configuration::forSymmetricSigner(new Sha256(), Key\InMemory::plainText($key));
+        $options = static::getConfig();
+
+        $config = Configuration::forSymmetricSigner(new Sha256(), Key\InMemory::plainText($options['key']));
 
         $now = new \DateTimeImmutable();
         $endTime = $now->modify('+10080 minute'); //7天

@@ -55,9 +55,9 @@ class ModelForm extends ModelRuleTool
         $this->removeFields(['deletetime', 'createtime', 'updatetime', 'id']);
 
         $removeRalation = $this->handleHook('api.handle.form_rule.options.remove_relation', true, 'bool');
-        if ($removeRalation) {
-            $this->removeRelationFields();
-        }
+        // if ($removeRalation) {
+        //     $this->removeRelationFields();
+        // }
 
         return $this;
     }
@@ -85,22 +85,21 @@ class ModelForm extends ModelRuleTool
     {
 
         $this->removeBaseFields();
-
-        $_items = [];
-
         
+        $_items = [];
         foreach ($this->items as $key => $item) {
-            $_item = [
-                'id' => $item['id'] ?? 0,
-                'name' => $item['name'],
-                'title' => $item['title'],
-                'type' => $item['type'],
-                'component' => $this->getModelTypeComponent($item['type']),
-                'notnull' => $item['notnull'] ?? false,
-                'describe' => $item['describe'] ?? '',
-                'default' => $item['default'] ?? '',
-                'weight' => $item['weight'] ?? 0,
-            ];
+            $_item = $item;
+            // $_item = [
+            //     'id' => $item['id'] ?? 0,
+            //     'name' => $item['name'],
+            //     'title' => $item['title'],
+            //     'type' => $item['type'],
+            //     'component' => $this->getModelTypeComponent($item['type']),
+            //     'notnull' => $item['notnull'] ?? false,
+            //     'describe' => $item['describe'] ?? '',
+            //     'default' => $item['default'] ?? '',
+            //     'weight' => $item['weight'] ?? 0,
+            // ];
             
             $_item = $this->handleHook('api.handle.form_rule.dest.item', $_item);
             $_items[] = $_item;

@@ -2,6 +2,7 @@
 
 namespace mulo\api\library;
 
+use mulo\api\library\relation\ModelRelationHelper;
 use mulo\facade\Db;
 use mulo\api\traits\DefineHook;
 use mulo\exception\MuloException;
@@ -35,11 +36,24 @@ class ModelDb
      */
     public $filters = [];
 
+    public $relations = [];
+
 
     function __construct($model)
     {
 
         $this->modelData = $model;
+    }
+
+
+    /**
+     * 设置关联配置
+     * 
+     */
+    function setRelations($relations)
+    {
+        $this->relations = $relations;
+        return $this;
     }
 
     /**
@@ -61,11 +75,16 @@ class ModelDb
      * 加入关联数据
      * 
      */
-    function with(array $relationNames){
-        
+    function with(array $relationNames)
+    {
+
         return $this;
     }
 
+    /**
+     * 设置字段
+     * @param string|array $fields 字段
+     */
     function field($fields)
     {
         $this->fields = $fields;
@@ -95,7 +114,7 @@ class ModelDb
         $this->filters = $filters;
         return $this;
     }
-    
+
     # SECTION 执行查询
 
 
@@ -126,9 +145,6 @@ class ModelDb
     }
 
 
-
-
-
     # >SECTION 执行查询
 
     /**
@@ -139,6 +155,37 @@ class ModelDb
     function getQuery()
     {
         $query =  Db::table($this->modelData['table']);
+
+        $baseAlias = 'c';
+        $relationHandle = ModelRelationHelper::src([
+            'fields' => $this->fields,
+            'wheres' => $this->wheres,
+            'filters' => $this->filters,
+            'order' => $this->orderParams,
+            'limit' => $this->limitParams,
+        ])
+            ->setRelations($this->relations)
+            ->dest();
+        // 处理关联数据
+        // throw new MuloException('dev',0,[
+        //     'relationHandle'=>$relationHandle
+        // ]);
+
+        if ($relationHandle['hasRelation']) {
+            $this->fields = $relationHandle['fields'];
+            $this->wheres = $relationHandle['wheres'];
+            $this->filters = $relationHandle['filters'];
+            $this->orderParams = $relationHandle['order'];
+            $this->limitParams = $relationHandle['limit'];
+
+            $query = $query->alias($baseAlias);
+            foreach ($relationHandle['joins'] as $key => $joinParam) {
+                $query = $query->join(...$joinParam);
+            }
+        }
+
+
+
 
         if ($this->fields) {
             $query = $query->field($this->fields);
@@ -216,12 +263,18 @@ class ModelDb
             return $row;
         }
 
+        // throw new MuloException('dev',0,[
+        //     'sql'=>$query->fetchSql()->find()
+        // ]);
+
         $row = $query->find();
 
         return $row;
     }
 
-     /**
+
+
+    /**
      * 
      * TODO sum 获取总分
      * 
@@ -233,7 +286,7 @@ class ModelDb
         return $row;
     }
 
-    
+
 
     /**
      * TODO 保存数据
@@ -268,6 +321,27 @@ class ModelDb
         return $id;
     }
 
+    function insertAll(array $insertDatas)
+    {
+        $query =  Db::table($this->modelData['table']);
+        // $insertData = json_decode(json_encode($insertData,JSON_UNESCAPED_UNICODE),true);
+        // $sql = \mulo\api\library\database\BuildSql::buildInsertAllQuery($this->modelData['table'], $insertData);
+        // throw new MuloException('dev',0,[
+        //     'data'=>json_encode($insertData,JSON_UNESCAPED_UNICODE),
+        //     'sql'=>$sql,
+        //     // 'sql'=>$query->fetchSql()->insertAll($data),
+        //     'sql_db'=>\think\facade\Db::table('ep_store_income_item')->fetchSql()->insertAll($insertData),
+        // ]);
+        // return $query->insertAll($data);
+        
+        $chagneNum = 0;
+        foreach ($insertDatas as $key => $insertData) {
+            // 处理数据
+            $chagneNum += $query->insert($insertData);
+        }
+        return $chagneNum;
+    }
+
     /**
      * 导出规则
      * 
@@ -285,12 +359,12 @@ class ModelDb
         // 处理数据
         unset($data['id']);
 
-     
+
 
         $data = $this->parseSaveFields($data);
 
-        
-     
+
+
         $query =  Db::table($this->modelData['table']);
         $data = $this->handleSaveData($data, 'add');
         $data = $this->handleHook('api.add', $data);

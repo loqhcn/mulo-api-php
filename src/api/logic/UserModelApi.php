@@ -35,6 +35,19 @@ class UserModelApi
 
     public $request = null;
 
+    public $options = [
+        'login' => [
+            'status_enable' => 1,
+            'status_field' => 'status',
+            'status_success' => 1,
+            'status_list' => [
+                '0' => '已禁用',
+                '1' => '正常',
+            ],
+        ]
+    ];
+
+
     /**
      * 定义业务模型
      * 
@@ -58,17 +71,6 @@ class UserModelApi
         $this->tool = modelTool();
     }
 
-    function setLogic($field, $value)
-    {
-        $this->logics[$field] = $value;
-        return $this;
-    }
-
-    function getLogic($field)
-    {
-        return  $this->logics[$field] ?? null;
-    }
-
     /**
      * 构建链式方法
      * @param array $model 使用的模型(不强制使用) 
@@ -81,6 +83,18 @@ class UserModelApi
         $obj = new static();
         $obj->models = $models;
         return $obj;
+    }
+
+
+    function setLogic($field, $value)
+    {
+        $this->logics[$field] = $value;
+        return $this;
+    }
+
+    function getLogic($field)
+    {
+        return  $this->logics[$field] ?? null;
     }
 
     /**
@@ -134,6 +148,17 @@ class UserModelApi
             return  handleResult(0, "账户不存在", [
                 'username' => $username
             ]);
+        }
+
+        $loginOptions = $this->options['login'];
+        if ($loginOptions['status_enable']) {
+            $accountStatus = $user[$loginOptions['status_field']] ?? null;
+            if ($accountStatus != $loginOptions['status_success']) {
+                $accountStatus = $loginOptions['status_list'][$accountStatus] ?? '未知账户状态:'.$accountStatus;
+                return  handleResult(0, "账户状态异常 " . ($accountStatus), [
+                    'username' => $username,
+                ]);
+            }
         }
 
         // TODO 验证密码
@@ -253,10 +278,12 @@ class UserModelApi
                 'username' => $username
             ]);
         }
-        
+
         // 生成令牌
         $token = $this->auth()->createToken($user);
     }
+
+
 
     /**
      * 读取密码
@@ -282,6 +309,8 @@ class UserModelApi
                 $params['username'],
                 $params['password']
             ];
+
+            // 判断状态
 
             $ret = $this->login($username, $password);
 

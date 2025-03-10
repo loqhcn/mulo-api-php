@@ -4,6 +4,7 @@ namespace mulo\api\list;
 
 use mulo\api\library\OperateTool;
 use mulo\api\traits\DefineHook;
+use mulo\library\data_type\PhpDataType;
 
 /**
  * 模型列表功能
@@ -95,32 +96,12 @@ class ModelList
         $this->handleHook('api.handle.list_rule.dest.list', $this, 'none');
 
         $_items = [];
-        // 载入基础字段
-        $_items[] = [
-            'id' => 0,
-            'name' => 'id',
-            'title' => 'ID',
-            'type' => 'number',
-            'component' => 'text',
-            'describe' => 'id',
-            'weight' => 99,
-            'fixed' => 'left',
-            'width' => 80,
-        ];
-
+      
         // 载入字段
         foreach ($this->items as $key => $item) {
-            $_item = [
-                'id' => $item['id'],
-                'name' => $item['name'],
-                'title' => $item['title'],
-                'type' => $item['type'],
-                'component' => $this->getModelTypeComponent($item['type']),
-                'describe' => $item['notnull'],
-                'weight' => $item['weight'],
-                'fixed' => false,
-            ];
-
+            $item['component'] = $this->getModelTypeComponent($item['type']);
+            $_item = $item;
+            
             $_item = $this->handleHook('model_list.dest', $_item);
             $_items[] = $_item;
         }
